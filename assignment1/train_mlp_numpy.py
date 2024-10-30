@@ -53,7 +53,9 @@ def accuracy(predictions, targets):
     #######################
     # PUT YOUR CODE HERE  #
     #######################
-
+    predicted_labels = np.argmax(predictions, axis=1)
+    target_labels = np.argmax(targets, axis=1)
+    accuracy = np.mean(predicted_labels == target_labels)
     #######################
     # END OF YOUR CODE    #
     #######################
@@ -81,7 +83,19 @@ def evaluate_model(model, data_loader):
     #######################
     # PUT YOUR CODE HERE  #
     #######################
-
+    accuracies = []
+    batch_sizes = []
+    
+    for batch_data, batch_targets in data_loader:
+        # Forward pass
+        predictions = model.forward(batch_data)
+        # Calculate accuracy for this batch
+        batch_accuracy = accuracy(predictions, batch_targets)
+        accuracies.append(batch_accuracy)
+        batch_sizes.append(len(batch_data))
+    
+    # Compute weighted average of accuracies based on batch sizes
+    avg_accuracy = np.average(accuracies, weights=batch_sizes)
     #######################
     # END OF YOUR CODE    #
     #######################
@@ -135,14 +149,61 @@ def train(hidden_dims, lr, batch_size, epochs, seed, data_dir):
     #######################
 
     # TODO: Initialize model and loss module
-    model = ...
-    loss_module = ...
+    # Initialize model and loss module
+    n_inputs = 3 * 32 * 32  # CIFAR10 images: 3 channels, 32x32 pixels
+    n_classes = 10
+    model = MLP(n_inputs, hidden_dims, n_classes)
+    loss_module = CrossEntropyModule()
     # TODO: Training loop including validation
-    val_accuracies = ...
+    val_accuracies = []
     # TODO: Test best model
-    test_accuracy = ...
+    test_accuracy = 0.0
     # TODO: Add any information you might want to save for plotting
-    logging_dict = ...
+    logging_dict = {'losses': [], 'val_accuracies': [],
+                     'test_accuracy': 0.0, 'best_validation_accuracy': 0.0}
+
+    # Initialize best model
+    best_model = None
+    
+    for epoch in tqdm(range(epochs), desc='Training'):
+        # Training
+        for batch_data, batch_targets in cifar10_loader['train']:
+            # Flatten
+            batch_data = batch_data.reshape(batch_data.shape[0], -1)
+            # Forward pass
+            predictions = model.forward(batch_data)
+            # Calculate loss and append to logging
+            loss = loss_module.forward(predictions, batch_targets)
+            logging_dict['losses'].append(loss)
+            # Backward pass
+            dL_dy = loss_module.backward(predictions, batch_targets)
+            model.backward(dL_dy)
+
+            # Update weights using SGD
+            for layer in model.layers:
+                if hasattr(layer, 'params'):
+                    for param_name, param in layer.params.items():
+                        param -= lr * layer.grads[param_name]
+            
+        # Validation data
+        val_data, val_targets = cifar10_loader['val']
+        # Evaluate model on validation set
+        val_accuracy = evaluate_model(model, zip(val_data, val_targets))
+        val_accuracies.append(val_accuracy)
+
+        # Save best model
+        if best_model is None or val_accuracy > max(val_accuracies):
+            best_validation_accuracy = val_accuracy
+            best_model = deepcopy(model)
+
+    # Evaluate best model on test set
+    test_data, test_targets = cifar10_loader['test']
+    test_accuracy = evaluate_model(best_model, zip(test_data, test_targets))
+
+    # Save logging information
+    logging_dict['val_accuracies'] = val_accuracies
+    logging_dict['test_accuracy'] = test_accuracy
+    logging_dict['best_validation_accuracy'] = best_validation_accuracy
     #######################
     # END OF YOUR CODE    #
     #######################
@@ -177,3 +238,4 @@ if __name__ == '__main__':
 
     train(**kwargs)
     # Feel free to add any additional functions, such as plotting of the loss curve here
+
