@@ -31,31 +31,77 @@ from modules import CrossEntropyModule
 import cifar10_utils
 
 import torch
+import logging
+import matplotlib.pyplot as plt
 
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger()
+
+def plot_training_progress(logging_dict):
+    """
+    Creates a plot showing training loss and validation accuracy over epochs.
+    
+    Args:
+        logging_dict: Dictionary containing 'losses' and 'val_accuracies' lists
+    """
+    # Create figure and axis objects with a single subplot
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+
+    # Plot training loss on left y-axis
+    color = 'tab:blue'
+    ax1.set_xlabel('Iterations')
+    ax1.set_ylabel('Training Loss', color=color)
+    ax1.plot(logging_dict['losses'], color=color, label='Training Loss')
+    ax1.tick_params(axis='y', labelcolor=color)
+
+    # Create second y-axis that shares x-axis
+    ax2 = ax1.twinx()
+    color = 'tab:orange'
+    ax2.set_ylabel('Validation Accuracy', color=color)
+    # Plot validation accuracy
+    # Note: val_accuracies is recorded once per epoch, so we need to scale x-axis
+    iterations_per_epoch = len(logging_dict['losses']) // len(logging_dict['val_accuracies'])
+    val_x = np.arange(len(logging_dict['val_accuracies'])) * iterations_per_epoch
+    ax2.plot(val_x, logging_dict['val_accuracies'], color=color, label='Validation Accuracy')
+    ax2.tick_params(axis='y', labelcolor=color)
+
+    # Add title
+    plt.title('Training Progress')
+
+    # Add legend
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
+
+    # Adjust layout to prevent label cutoff
+    plt.tight_layout()
+
+    # Save the plot
+    plt.savefig('training_progress.png')
+    plt.close()
 
 def accuracy(predictions, targets):
     """
-    Computes the prediction accuracy, i.e. the average of correct predictions
+    Computes the prediction accuracy, i.e., the average of correct predictions
     of the network.
 
     Args:
       predictions: 2D float array of size [batch_size, n_classes], predictions of the model (logits)
-      labels: 1D int array of size [batch_size]. Ground truth labels for
-              each sample in the batch
+      targets: 1D int array of size [batch_size], ground truth labels for each sample in the batch
     Returns:
       accuracy: scalar float, the accuracy of predictions between 0 and 1,
-                i.e. the average correct predictions over the whole batch
-
-    TODO:
-    Implement accuracy computation.
+                i.e., the average correct predictions over the whole batch
     """
 
     #######################
     # PUT YOUR CODE HERE  #
     #######################
-    predicted_labels = np.argmax(predictions, axis=1)
-    target_labels = np.argmax(targets, axis=1)
-    accuracy = np.mean(predicted_labels == target_labels)
+    # Compute predicted classes
+    predicted_classes = np.argmax(predictions, axis=1)
+
+    # Calculate accuracy
+    accuracy = np.mean(predicted_classes == targets)
     #######################
     # END OF YOUR CODE    #
     #######################
@@ -72,30 +118,27 @@ def evaluate_model(model, data_loader):
       data_loader: The data loader of the dataset to evaluate.
     Returns:
       avg_accuracy: scalar float, the average accuracy of the model on the dataset.
-
-    TODO:
-    Implement evaluation of the MLP model on a given dataset.
-
-    Hint: make sure to return the average accuracy of the whole dataset,
-          independent of batch sizes (not all batches might be the same size).
     """
 
     #######################
     # PUT YOUR CODE HERE  #
     #######################
-    accuracies = []
-    batch_sizes = []
-    
+    total_correct = 0
+    total_samples = 0
+
     for batch_data, batch_targets in data_loader:
+        # Flatten data
+        batch_data = batch_data.reshape(batch_data.shape[0], -1)
+
         # Forward pass
         predictions = model.forward(batch_data)
-        # Calculate accuracy for this batch
+
         batch_accuracy = accuracy(predictions, batch_targets)
-        accuracies.append(batch_accuracy)
-        batch_sizes.append(len(batch_data))
-    
-    # Compute weighted average of accuracies based on batch sizes
-    avg_accuracy = np.average(accuracies, weights=batch_sizes)
+        total_correct += batch_accuracy * batch_data.shape[0]
+        total_samples += batch_data.shape[0]
+
+    # Compute average accuracy
+    avg_accuracy = total_correct / total_samples
     #######################
     # END OF YOUR CODE    #
     #######################
@@ -103,12 +146,50 @@ def evaluate_model(model, data_loader):
     return avg_accuracy
 
 
+
+# def evaluate_model(model, data_loader):
+#     """
+#     Performs the evaluation of the MLP model on a given dataset.
+#
+#     Args:
+#       model: An instance of 'MLP', the model to evaluate.
+#       data_loader: The data loader of the dataset to evaluate.
+#     Returns:
+#       avg_accuracy: scalar float, the average accuracy of the model on the dataset.
+#     """
+#
+#     #######################
+#     # PUT YOUR CODE HERE  #
+#     #######################
+#     total_correct = 0
+#     total_samples = 0
+#
+#     for batch_data, batch_targets in data_loader:
+#         batch_data = batch_data.astype(np.float32) / 255.0
+#
+#         # Forward pass
+#         predictions = model.forward(batch_data)
+#
+#         batch_accuracy = accuracy(predictions, batch_targets)
+#         total_correct += batch_accuracy * batch_data.shape[0]
+#         total_samples += batch_data.shape[0]
+#
+#     # Compute average accuracy
+#     avg_accuracy = total_correct / total_samples
+#     #######################
+#     # END OF YOUR CODE    #
+#     #######################
+#
+#     return avg_accuracy
+
+
+
 def train(hidden_dims, lr, batch_size, epochs, seed, data_dir):
     """
     Performs a full training cycle of MLP model.
 
     Args:
-      hidden_dims: A list of ints, specificying the hidden dimensionalities to use in the MLP.
+      hidden_dims: A list of ints, specifying the hidden dimensionalities to use in the MLP.
       lr: Learning rate of the SGD to apply.
       batch_size: Minibatch size for the data loaders.
       epochs: Number of training epochs to perform.
@@ -153,6 +234,8 @@ def train(hidden_dims, lr, batch_size, epochs, seed, data_dir):
     n_inputs = 3 * 32 * 32  # CIFAR10 images: 3 channels, 32x32 pixels
     n_classes = 10
     model = MLP(n_inputs, hidden_dims, n_classes)
+    # Print model
+    print(model)
     loss_module = CrossEntropyModule()
     # TODO: Training loop including validation
     val_accuracies = []
@@ -164,46 +247,58 @@ def train(hidden_dims, lr, batch_size, epochs, seed, data_dir):
 
     # Initialize best model
     best_model = None
+    best_validation_accuracy = 0.0
     
     for epoch in tqdm(range(epochs), desc='Training'):
-        # Training
-        for batch_data, batch_targets in cifar10_loader['train']:
-            # Flatten
-            batch_data = batch_data.reshape(batch_data.shape[0], -1)
-            # Forward pass
-            predictions = model.forward(batch_data)
-            # Calculate loss and append to logging
-            loss = loss_module.forward(predictions, batch_targets)
-            logging_dict['losses'].append(loss)
-            # Backward pass
-            dL_dy = loss_module.backward(predictions, batch_targets)
-            model.backward(dL_dy)
+      # Training
+      for batch_data, batch_targets in cifar10_loader['train']:
+          # Flatten data
+          batch_data = batch_data.reshape(batch_data.shape[0], -1)
 
-            # Update weights using SGD
-            for layer in model.layers:
-                if hasattr(layer, 'params'):
-                    for param_name, param in layer.params.items():
-                        param -= lr * layer.grads[param_name]
-            
-        # Validation data
-        val_data, val_targets = cifar10_loader['val']
-        # Evaluate model on validation set
-        val_accuracy = evaluate_model(model, zip(val_data, val_targets))
-        val_accuracies.append(val_accuracy)
+          # Forward pass
+          predictions = model.forward(batch_data)
+          logger.debug(f"predictions.shape: {predictions.shape}")
+          logger.debug(f"batch_targets.shape: {batch_targets.shape}")
 
-        # Save best model
-        if best_model is None or val_accuracy > max(val_accuracies):
-            best_validation_accuracy = val_accuracy
-            best_model = deepcopy(model)
+          # Calculate loss
+          loss = loss_module.forward(predictions, batch_targets)
+          # In the training loop, after calculating loss:
+          if len(logging_dict['losses']) % 100 == 0:  # Log every 100 iterations
+              logger.info(f"Iteration {len(logging_dict['losses'])}, Training Loss: {loss:.4f}")
+          logging_dict['losses'].append(loss)
 
-    # Evaluate best model on test set
-    test_data, test_targets = cifar10_loader['test']
-    test_accuracy = evaluate_model(best_model, zip(test_data, test_targets))
+          # Backward pass
+          dL_dy = loss_module.backward(predictions, batch_targets)
+          logger.debug(f"dL_dy.shape: {dL_dy.shape}")
+          model.backward(dL_dy)
 
-    # Save logging information
-    logging_dict['val_accuracies'] = val_accuracies
-    logging_dict['test_accuracy'] = test_accuracy
-    logging_dict['best_validation_accuracy'] = best_validation_accuracy
+          # Update model parameters using SGD
+          for layer in model.layers:
+              if hasattr(layer, 'params'):
+                  logger.debug(f"Layer {layer}")
+                  # Update parameters
+                  for param_name, param in layer.params.items():
+                      logger.debug(f"param_name: {param_name}")
+                      logger.debug(f"param.shape: {param.shape}")
+                      logger.debug(f"layer.grads[{param_name}].shape: {layer.grads[param_name].shape}")
+                      param -= lr * layer.grads[param_name]
+
+      # Validation data
+      val_accuracy = evaluate_model(model, cifar10_loader['validation'])
+      val_accuracies.append(val_accuracy)
+      logger.info(f"Epoch {epoch + 1}, Validation Accuracy: {val_accuracy:.4f}")
+
+      if best_model is None or val_accuracy > best_validation_accuracy:
+          best_validation_accuracy = val_accuracy
+          best_model = deepcopy(model)
+
+      # Evaluate best model on test set
+      test_accuracy = evaluate_model(best_model, cifar10_loader['test'])
+
+      # Save logging information
+      logging_dict['val_accuracies'] = val_accuracies
+      logging_dict['test_accuracy'] = test_accuracy
+      logging_dict['best_validation_accuracy'] = best_validation_accuracy
     #######################
     # END OF YOUR CODE    #
     #######################
@@ -236,6 +331,14 @@ if __name__ == '__main__':
     args = parser.parse_args()
     kwargs = vars(args)
 
-    train(**kwargs)
+    # train(**kwargs)
     # Feel free to add any additional functions, such as plotting of the loss curve here
-
+    # Train the model and get the logging dict
+    model, val_accuracies, test_accuracy, logging_dict = train(**kwargs)
+    
+    # Create the plot
+    plot_training_progress(logging_dict)
+    
+    # Print final results
+    logger.info(f"Best validation accuracy: {logging_dict['best_validation_accuracy']:.4f}")
+    logger.info(f"Test accuracy: {logging_dict['test_accuracy']:.4f}")

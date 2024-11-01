@@ -44,8 +44,8 @@ class LinearModule(object):
 
         # Note: For the sake of this assignment, please store the parameters
         # and gradients in this format, otherwise some unit tests might fail.
-        self.params = {'weight': None, 'bias': None}  # Model parameters
-        self.grads = {'weight': None, 'bias': None}  # Gradients
+        self.params = {'weight': None, 'bias': None} # Model parameters
+        self.grads = {'weight': None, 'bias': None} # Gradients
 
         #######################
         # PUT YOUR CODE HERE  #
@@ -55,8 +55,8 @@ class LinearModule(object):
         self.input_layer = input_layer
 
         # Kaiming initialization for weights: W = N(0, 2 / in_features)
-        std = 1 / in_features if input_layer else np.sqrt(2 / in_features)
-        self.params['weight'] = np.random.normal(0, std, (out_features, in_features))
+        self.params['weight'] = np.random.randn(out_features, in_features) * np.sqrt(2. / in_features)
+
         # Initialize biases to zeros
         self.params['bias'] = np.zeros((1, out_features))
 
@@ -114,7 +114,6 @@ class LinearModule(object):
         #######################
         # Compute gradients: dL/dW = dl/dY^T * dY/dW = dout^T * X
         self.grads['weight'] = np.dot(dout.T, self.x)
-
         # Compute gradients: dL/db = dl/dY^T * dY/db = dout^T * 1
         self.grads['bias'] = np.sum(dout, axis=0, keepdims=True)
         # Compute gradient with respect to input: dl/dX = dl/dY * dY/dX = dout * W
@@ -270,6 +269,7 @@ class SoftMaxModule(object):
         #######################
         # PUT YOUR CODE HERE  #
         #######################
+        # Initialize the gradient with respect to the input
         dx = self.out * (dout - np.sum(self.out * dout, axis=1, keepdims=True))
         #######################
         # END OF YOUR CODE    #
@@ -289,7 +289,6 @@ class SoftMaxModule(object):
         # PUT YOUR CODE HERE  #
         #######################
         self.x = None
-        self.out = None
         #######################
         # END OF YOUR CODE    #
         #######################
@@ -316,16 +315,18 @@ class CrossEntropyModule(object):
         #######################
         # PUT YOUR CODE HERE  #
         #######################
-        # Ensure x is normalized (sum to 1 along each row)
-        #x = x / np.sum(x, axis=1, keepdims=True)
+        # Convert y to one-hot encoding
+        y_true = np.zeros((y.size, x.shape[1]))
+        y_true[np.arange(y.size), y] = 1
 
-        # Avoid division by zero
+        # Shape assertion
+        assert x.shape == y_true.shape, "CE Loss Forward Pass: Shape mismatch between x and y_true"
+        
+        # Compute cross-entropy loss
+        # Adding small epsilon to avoid log(0)
         eps = 1e-15
         x_clipped = np.clip(x, eps, 1 - eps)
-        N = x.shape[0]
-        # Compute loss
-        log_probs = np.log(x_clipped[np.arange(N), y])
-        out = -np.sum(log_probs) / N
+        out = -np.sum(y_true * np.log(x_clipped))
         #######################
         # END OF YOUR CODE    #
         #######################
@@ -334,7 +335,7 @@ class CrossEntropyModule(object):
 
     def backward(self, x, y):
         """
-        Backward pass. Prad is gay
+        Backward pass.
         Args:
           x: input to the module
           y: labels of the input
@@ -348,9 +349,14 @@ class CrossEntropyModule(object):
         #######################
         # PUT YOUR CODE HERE  #
         #######################
-        N = x.shape[0]
-        dx = np.zeros(x.shape)
-        dx[np.arange(N), y] = - 1 / N / x[np.arange(N), y]
+        y_true = np.zeros((y.size, x.shape[1]))
+        y_true[np.arange(y.size), y] = 1
+
+        # Shape assertion
+        assert x.shape == y_true.shape, "CE Loss Backward Pass: Shape mismatch between x and y_true"
+
+        # Compute gradient with respect to input: dl/dX = dl/dY * dY/dX
+        dx = x - y_true
         #######################
         # END OF YOUR CODE    #
         #######################

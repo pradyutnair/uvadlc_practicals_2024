@@ -23,7 +23,6 @@ from __future__ import print_function
 
 from modules import *
 
-
 class MLP(object):
     """
     This class implements a Multi-layer Perceptron in NumPy.
@@ -61,8 +60,9 @@ class MLP(object):
         in_features = n_inputs
 
         # Add hidden layers
-        for out_features in n_hidden:
-            self.layers.append(LinearModule(in_features, out_features))
+        for i, out_features in enumerate(n_hidden):
+            is_input_layer = (i == 0)
+            self.layers.append(LinearModule(in_features, out_features, input_layer=is_input_layer))
             self.layers.append(ELUModule(alpha=1.0))
             in_features = out_features
 
@@ -72,7 +72,26 @@ class MLP(object):
         #######################
         # END OF YOUR CODE    #
         #######################
-
+    
+    def __str__(self):
+        """
+        Returns a string representation of the model.
+        """
+        #return f"MLP with {self.n_inputs} inputs, {self.n_hidden} hidden units and {self.n_classes} output"
+        text = 'MLP with:\n'
+        for layer in self.layers:
+            text += f'{layer}\n'
+            # Layer parameters
+            if hasattr(layer, 'W'):
+                text += f'W shape: {layer.W.shape}\n'
+            if hasattr(layer, 'b'):
+                print(f'b shape: {layer.b.shape}')
+                text += f'b shape: {layer.b.shape}\n'
+            if hasattr(layer, 'alpha'):
+                text += f'alpha: {layer.alpha}\n'
+            print()
+        return text
+    
     def forward(self, x):
         """
         Performs forward pass of the input. Here an input tensor x is transformed through
